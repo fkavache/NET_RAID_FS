@@ -1,0 +1,9 @@
+COMPILER = gcc
+FILESYSTEM_FILES = ssfs.c parser.c
+
+build: $(FILESYSTEM_FILES)
+	$(COMPILER) $(FILESYSTEM_FILES) -o ssfs `pkg-config fuse --cflags --libs`
+	echo 'run: ./ssfs -f [config file name]'
+
+clean:
+	rm ssfs

@@ -1,0 +1,10 @@
+errorlog = /home/vache/Desktop/error.log
+cache_size = 16K
+cache_replacement = rlu
+timeout = 3
+
+diskname = STORAGE1
+mountpoint = /home/vache/Desktop/mountdir2
+raid = 1
+servers = 127.0.0.1:10001, 127.0.0.1:10002
+hotswap = 127.0.0.1:11111
