@@ -1,21 +1,23 @@
 NET_RAID_FS 
 >Final Project for Freeuni / Macs / OS
 
-
 Vache Katsadze - vkats15@freeuni.edu.ge
 
 
->შესავალი
-
-network raid filesystem არის raid 1 ალგორითმებზე დაშენებული ქსელური ფაილური სისტემა
-ინფორმაციის დასაცავად გამოიყენება stable storage მექანიზმი (md5 ჰეშის გამოყენებით), ერთჯერადად
-დაკარგული სერვერის ჩანაცვლება ხდება hotswap სერვერით, რომლის დროსაც ხდება გადარჩენილი
-სერვერიდან დატას დუბლირება hotswap სერვერზე, პერფორმანსის გაუმჯობესებისთვის იმპლემენტირებულია
-ქეშირების / epoll მექანიზმები  
 
 
+>Introduction
 
->პროექტის სტრუქტურა
+NET_RAID_FS is a network filesystem implemented with standard raid level 1 algorithm. 
+
+1. Filesystem uses stable storage which guarantees atomicity for any given write operation and allows software to be written that is robust against some hardware and power failures. 
+2. In case of server loss, filesystem uses hot swapping which allows replacement of server to a system without stopping, shutting down, or rebooting it.
+3. Also filesystem has caching and epoll mechanisms for efficiency purposes.
+
+
+
+
+>Project Structure
 
 ```
 .
@@ -34,23 +36,22 @@ network raid filesystem არის raid 1 ალგორითმებზე
 
 ``` 
 
-პროექტის ფაილების სტრუქტურა არის შემდეგნაირი :
-განცალკევებულია სერვერის და კლიენტის გამშვები კოდები და შესამაბისად აქვთ ცალ - ცალკე makefile ები, 
-კლიენტის მხარეს არის დამატებით parser.c /  parser.h ფაილები, რომლებიც პროგრამის გაშვებისას გამოიყენება
-კონფიგურაციის ფაილის დასაპარსად, კლიენტის მხარეს ასევე ვნახავთ utils.h ფაილს, რომელშის არის ყველა 
-ის სტრუქტურა აღწერილი, რომელსაც პროგრამა იყენებს, utils.h არის საერთო client / server ისთვის რადგან
-ორივემ უნდა იცოდეს ერთი რას გზავნის და მეორე რას იღებს.
+There are separate entry points and therefore separate makefile files for server and client,
+there is additional parser.c/h in client side to parse configuration file, also in client side
+there is utils.h which is common for both server and client and where there is described all the
+data structures that is needed to send and receive data.
 
 
 
->გამოყენება
-პროგრამის გასაშვებად საჭიროა ვალიდური config file ის არსებობა, config file არის ასეთი სახის:
 
+>How to Use
+
+To run the program you need to have valid configuration file, which looks like this:
 
 ```
 errorlog = /path/to/error.log
 cache_size = 1024M
-cache_replacement = rlu
+cache_replacement = lru
 timeout = 10
 
 diskname = STORAGE1
@@ -66,48 +67,39 @@ servers = 127.0.0.1:10011, 127.0.0.1:10012, 127.0.0.1:10013
 hotswap = 127.0.0.1:22222
 
 ```
+Where:
+1. errorlog          - the file path where you want to log system activities.
+2. cache_size        - size of cache, which has B/K/M/G.
+3. cache_replacement - replacement algorithm (system has only lru support).
+4. timeout           - second, which system is waiting after server loss, in this time
+                       system might recover the lost server and continue working, after this time
+                       servers is declared missing.
 
-სადაც 
-1. errorlog არის იმ ფაილის path სადაც გინდათ რომ დაილოგოს პროგრამის სხვადასხვა აქტიურობები
-2. cache_size არის ქეშის ზომა, შეგიძლიათ გადასცეთ B/K/M/G
-3. cache_replacement არის ქეშიდან ენთრის გამოძევების ალგორითმი, ვალიდურია მხოლოდ rlu ზე
-4. timeout არის დრო (წამებში), რა დროც ელოდება პროგრამა გათიშულ სერვერს, ამ დროის გასვლის შემდეგ
-	სერვერი ცხადდება დაკარგულად და ილოგება შესაბამისი ინფორმაცია, ამ დროში სერვერის დაბრუნებისას კი
-	პროგრამა აგრძელებს ჩვეულ მუშაობას.
+Beside of these general configurations, there can be multiple disk configurations:
+1. diskname   - used only in logging.
+2. mountpoint - main mount directory for this disk, where client will read and write data.
+3. raid       - level of raid algorithm (system has only level 1 support).
+4. servers    - list of servers, which should be registered before client, there is only 2 servers
+                in raid 1.
+5. hotswap    - hotswap server for replacing lost server. After server loss data will be copied
+                from healthy server, in case of another server loss system will continue working
+                with only one server.
 
-ამ ზოგადი კონფიგების შემდგომ მოდის დისკების კონფიგი, რომელიც შეიძლება იყოს ნებისმიერი რაოდენობის
-1. diskname, დისკის სახელი, საჭიროა მხოლოდ ლოგირებისთვის
-2. mountpoint, ამ დისკის მთავარი მაუნთ დირექტორია, რომელშიც უნდა განხორციელდეს კლიენტის მხრიდან
-	წერა - კითხვა
-3. raid, რაიდ ალგორითმის ნომერი, 1 ან 5, თუმცა ეს კონკრეტული იმპლემენტაცია მოიცავს მხოლოდ raid 1 ს
-4. servers, სერვერების ჩამონათვალი, რომლებიც კლიენტის გაშვებამდე უნდა იყვნენ დარეგისტრირებულები, 
-	რაიდ 1 ის შემთხვევაში გვაქვს მხოლოდ 2 სერვერი, რაიდ 5 ის შემთხვევაში 3 +, თუმცა ამ კონკრეტულ 
-	იმპლემენტაციაში ასეთი დისკიც რაიდ 1 ად ითვლება და იყენებს მხოლოდ პირველ ორ სერვერს
-5. hotswap, ჰოტსვაპ სერვერი, დაკარგული სერვერის ჩასანაცვლებლად. თუ რომელიმე სერვერი დაიკარგა, ჯერ 
-	timeout დრო დალოდება მოხდება და ჩანაცვლდება ჰოტსვაპ სერვერით, გადარჩენილი სერვერიდან კი 
-	გადაიწერება მთლიანი დატა, თუ ჰოტსვაპის შემდგომ კიდე მოხდა სერვერის გათიშვა, პროგრამა გააგრძელებს
-	მუშაობას ერთი სერვერით.
-
-კონფიგურაციის ფაილის შექმნის შემდგომ უნდა მოხდეს libssl ის დაყენება ჰეშირების მექანიზმების ასამუშავებლად
+After creating the configuration file, libssl must be installed to run the hashing mechanisms
 command - $ sudo apt-get install libpcap-dev libssl-dev
 
+After installing this package, it is now possible to run the program, first running the server:
 
-ამ package ს დაინსტალირების შემდეგ უკვე შესაძლებელია პროგრამის გაშვება, პირველ რიგში ეშვება სერვერი:
+1. From the terminal which is opened from /NET_RAID_FS/server directory run make command first to compile code.
+2. To run the server itself run the following command ./net_raid_server [ip] [port] [storagedir]
+   (e.g. ./net_raid_server 127.0.0.1 10001 /home/kobi/Desktop/storagedir1)
+3. First all the servers that was specified in the configuration file must register and wait for their connections. 
 
-1. /NET_RAID_FS/server დირექტორიაში გახსნილი terminal დან პირველ რიგში გაუშვით make ბრძანება კოდის 
-	დასაკომპილირებლად
-2. თვითონ სერვერის გავება ხდება შემდეგი command ით, ./net_raid_server [ip] [port] [storagedir]
-	მაგალითისთვის - ./net_raid_server 127.0.0.1 10001 /home/kobi/Desktop/storagedir1
-3. თავდაპირველად უნდა დარეგისტრირდეს და თავიანთ ქონექშენს ელოდებოდეს, ყველა ის სერვერი, რომელიც 
-	კონფიგურაციის ფაილში იყო მითითებული
+After registering all the servers, the client runs
 
-ყველა სერვერის დარეგისტრირების შემდეგ ეშვება კლიენტი
+1. From the terminal which is opened from /NET_RAID_FS directory run make command first to compile code.
+2. To run the server itself run the following command ./net_raid_client [config file]
+   (e.g. ./net_raid_client /home/kobi/Desktop/config_file.txt)
 
-1. /NET_RAID_FS დირექტორიაში გახსნილი terminal დან პირველ რიგში გაუშვით make ბრძანება კოდის
-	დასაკომპილირებლად
-2. თვითონ პროგრამის გასაშვებად გამოიყენეთ შემდეგი command ./net_raid_client [config file]
-	მაგალითისთვის ./net_raid_client /home/kobi/Desktop/config_file.txt
-
-პროგრამის გაშვების შემდგომ კონფიგ ფაილში მითითებული mountpoint - ი / ები დამაუნთდება და უკვე შესაძლებელი 
-იქნება ამ მაუნთფოინთში მუშაობა, რეალურად დატა იქნება შენახული სერვერის მხარეს, დარეგისტრირებისას მითითებულ
-storagedir ებში
+After launching the program, the mount points specified in the configuration file will be mounted.
+Data will be stored on the server side, in the storage specified during the registration.
